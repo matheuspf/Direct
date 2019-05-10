@@ -19,6 +19,5 @@ int main ()
     std::cout << res.transpose() << "\n";
 
 
-
     return 0;
 }

@@ -2,6 +2,7 @@
 
 #include <Eigen/Dense>
 #include <handy/Handy.h>
+#include <unordered_set>
 
 
 using Vec = Eigen::VectorXd;
@@ -10,11 +11,22 @@ using Mat = Eigen::MatrixXd;
 
 struct Interval
 {
+    double fx;
+    int divisions;
     std::vector<int> k;
     Vec x;
-    double fx;
 };
 
+bool operator< (const Interval& a, const Interval& b)
+{
+    return a.fx <= b.fx;
+}
+
+// >=
+bool operator> (const Interval& a, const Interval& b)
+{
+    return !(a < b);
+}
 
 namespace std
 {
