@@ -14,28 +14,30 @@ struct Direct
     {
         Vec scale = upper - lower;
 
-        auto scaledF = [&func, &scale](const auto& x){
-            return f(x * scale);
+        auto scaleX = [&lower, &scale](const auto& x){
+            return (lower.array() + x.array() * scale.array()).matrix();
+        };
+
+        auto scaledF = [&func, &scaleX](const auto& x){
+            return func(scaleX(x));
         };
 
         int N = lower.size();
 
-        Interval best {1e8};
+        Interval best = { func(Vec::Constant(N, 0.5)), 0, std::vector<int>(N), Vec(Vec::Constant(N, 0.5)) };
 
-        std::unordered_map<int, std::vector<Interval>> intervals({
-            { 0, { func(Vec::Constant(N, 0.5)), 0, std::vector<int>(N), Vec::Constant(N, 0.5) } }
-        });
-
+        std::unordered_map<int, std::vector<Interval>> intervals = { { 0, { best } } };
 
         for(int iter = 0; iter < numIterations; ++iter)
         {
-            for(const auto& [k, ints] : intervals)
-            {
-                for(const auto& v : ints)
-                    handy::print(v.x.transpose());
-                handy::print("\n");
-            }
-            handy::print("\n\n");
+            // handy::print("Iter: ", iter);
+            // for(const auto& [k, ints] : intervals)
+            // {
+            //     for(const auto& v : ints)
+            //         handy::print(v.divisions, "       ", v.x.transpose());
+            //     handy::print("\n");
+            // }
+            // handy::print("potset:");
 
             auto potSet = potentialSet(intervals, best);
 
@@ -45,7 +47,7 @@ struct Direct
                 best = std::move(bestIter);
         }
 
-        return best.x;
+        return scaleX(best.x);
     }
 
     std::vector<Interval> potentialSet (std::unordered_map<int, std::vector<Interval>>& intervals, const Interval& best)
@@ -59,7 +61,7 @@ struct Direct
                 potSet.emplace_back(std::move(pop_heap(it->second)));
 
             if(it->second.empty())
-                intervals.erase(it++);
+                it = intervals.erase(it);
 
             else
                 ++it;
@@ -75,7 +77,7 @@ struct Direct
 
         for(auto& interval : potSet)
         {
-            int smallestK = std::min_element(interval.k.begin(), interval.k.end()) - interval.k.begin();
+            int smallestK = *std::min_element(interval.k.begin(), interval.k.end());
             std::vector<std::tuple<Interval, Interval, int>> newIntervals;
 
             for(int i = 0; i < interval.k.size(); ++i) if(interval.k[i] == smallestK)
@@ -108,8 +110,8 @@ struct Direct
                     right.k[prev]++;
                 }
 
-                left.divisions = std::accumulate(left.k.begin(), left.k.end());
-                right.divisions = std::accumulate(right.k.begin(), right.k.end());
+                left.divisions = std::accumulate(left.k.begin(), left.k.end(), 0);
+                right.divisions = std::accumulate(right.k.begin(), right.k.end(), 0);
 
                 const auto& bestAxis = std::min(left, right);
 
