@@ -5,6 +5,8 @@
 
 struct Direct
 {
+    using IntervalMap = std::map<int, std::vector<Interval>, std::greater<int>>;
+
     Direct (double eps = 1e-4, int numIterations = 1e4) : eps(eps), numIterations(numIterations)
     {
     }
@@ -24,22 +26,26 @@ struct Direct
 
         int N = lower.size();
 
-        Interval best = { func(Vec::Constant(N, 0.5)), 0, std::vector<int>(N), Vec(Vec::Constant(N, 0.5)) };
+        Interval best = { func(Vec::Constant(N, 0.5)), 0, std::vector<int>(N), Vec(Vec::Constant(N, 0.5)), 0.5*std::sqrt(N) };
 
-        std::unordered_map<int, std::vector<Interval>> intervals = { { 0, { best } } };
+        IntervalMap intervals = { { 0, { best } } };
 
         for(int iter = 0; iter < numIterations; ++iter)
         {
-            // handy::print("Iter: ", iter);
-            // for(const auto& [k, ints] : intervals)
-            // {
-            //     for(const auto& v : ints)
-            //         handy::print(v.divisions, "       ", v.x.transpose());
-            //     handy::print("\n");
-            // }
-            // handy::print("potset:");
+            handy::print("Iter: ", iter);
+            for(const auto& [k, ints] : intervals)
+            {
+                for(const auto& v : ints)
+                    handy::print(v.divisions, "       ", v.x.transpose());
+                handy::print("\n");
+            }
+            handy::print("potset:");
 
             auto potSet = potentialSet(intervals, best);
+            
+            for(const auto& v : potSet)
+                handy::print(v.divisions, "       ", v.x.transpose());
+            handy::print("\n\n");
 
             auto bestIter = createSplits(scaledF, potSet, intervals);
 
@@ -50,28 +56,32 @@ struct Direct
         return scaleX(best.x);
     }
 
-    std::vector<Interval> potentialSet (std::unordered_map<int, std::vector<Interval>>& intervals, const Interval& best)
+    std::vector<Interval> potentialSet (IntervalMap& intervals, const Interval& best)
     {
+        auto hull = convexHull(intervals);
+
         std::vector<Interval> potSet;
-        potSet.reserve(intervals.size());
+        potSet.reserve(hull.size());
+        potSet.push_back(hull.front());
 
-        for(auto it = intervals.begin(); it != intervals.end();)
+        if(hull.size() > 1)
+            potSet.push_back(hull.back());
+
+        for(int i = 1; i < hull.size() - 1; ++i)
         {
-            // if(it->second[0].fx -  <= best.fx - eps * std::abs(best.fx))
-                potSet.emplace_back(std::move(pop_heap(it->second)));
+            double k1 = (hull[i].fx - hull[i-1].fx) / (hull[i].size - hull[i-1].size);
+            double k2 = (hull[i].fx - hull[i+1].fx) / (hull[i].size - hull[i+1].size);
+            double k = std::max(k1, k2);
 
-            if(it->second.empty())
-                it = intervals.erase(it);
-
-            else
-                ++it;
+            if(hull[i].fx - k * hull[i].size <= best.fx - eps * std::abs(best.fx))
+                potSet.push_back(hull[i]);
         }
 
         return potSet;
     }
-    
+
     template <class Func>
-    Interval createSplits(const Func& func, const std::vector<Interval>& potSet, std::unordered_map<int, std::vector<Interval>>& intervals)
+    Interval createSplits(const Func& func, const std::vector<Interval>& potSet, IntervalMap& intervals)
     {
         Interval best{1e8};
 
@@ -113,6 +123,9 @@ struct Direct
                 left.divisions = std::accumulate(left.k.begin(), left.k.end(), 0);
                 right.divisions = std::accumulate(right.k.begin(), right.k.end(), 0);
 
+                left.size = 0.5 * std::sqrt(std::inner_product(left.k.begin(), left.k.end(), left.k.begin(), 1.0, std::plus<double>{}, std::multiplies<double>{}));
+                right.size = 0.5 * std::sqrt(std::inner_product(right.k.begin(), right.k.end(), right.k.begin(), 1.0, std::plus<double>{}, std::multiplies<double>{}));
+
                 const auto& bestAxis = std::min(left, right);
 
                 if(bestAxis < best)
@@ -124,6 +137,43 @@ struct Direct
         }
 
         return best;
+    }
+
+
+    std::vector<Interval> convexHull (IntervalMap& intervals)
+    {
+        std::vector<IntervalMap::iterator> hull;
+        hull.reserve(intervals.size());
+//        std::prev(intervals.end())
+
+        for(auto it = intervals.begin(); it != intervals.end(); ++it)
+        {
+            while(hull.size() >= 2 && crossProduct(hull[hull.size()-2]->second[0], hull[hull.size()-1]->second[0], it->second[0]))
+                hull.pop_back();
+            
+            hull.push_back(it);
+        }
+
+        std::vector<Interval> hullValues;
+        hullValues.reserve(hull.size());
+
+        for(auto& it : hull)
+        {
+            hullValues.emplace_back(pop_heap(it->second));
+
+            if(it->second.empty())
+                it = intervals.erase(it);
+            
+            else
+                it++;
+        }
+
+        return hullValues;
+    }
+
+    double crossProduct (const Interval& o, const Interval& a, const Interval& b) const
+    {
+        return (a.divisions - o.divisions) * (b.fx - o.fx) - (a.fx - o.fx) * (b.divisions - o.divisions);
     }
 
 
