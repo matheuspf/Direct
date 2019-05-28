@@ -1,11 +1,40 @@
 #pragma once
 
-#include "Helpers.h"
+#include <Eigen/Dense>
+#include <handy/Handy.h>
+#include <map>
+#include <queue>
+
+
+using Vec = Eigen::VectorXd;
+using Mat = Eigen::MatrixXd;
+
+
+struct Interval
+{
+    double fx;
+    double size;
+    std::vector<int> k;
+    Vec x;
+};
+
+bool operator< (const Interval& a, const Interval& b)
+{
+    return a.fx <= b.fx;
+}
 
 
 struct Direct
 {
-    using IntervalMap = std::map<int, std::vector<Interval>, std::greater<int>>;
+    struct IntervalComp
+    {
+        bool operator() (float a, float b)
+        {
+            return a < b + 1e-13;
+        }
+    };
+
+    using IntervalMap = std::map<float, std::priority_queue<Interval>, IntervalComp>;
 
     Direct (double eps = 1e-4, int numIterations = 1e4) : eps(eps), numIterations(numIterations)
     {
@@ -26,9 +55,9 @@ struct Direct
 
         int N = lower.size();
 
-        Interval best = { func(Vec::Constant(N, 0.5)), 0, std::vector<int>(N), Vec(Vec::Constant(N, 0.5)), 0.5*std::sqrt(N) };
+        Interval best = { func(Vec::Constant(N, 0.5)), 0.5*std::sqrt(N), std::vector<int>(N), Vec(Vec::Constant(N, 0.5)) };
 
-        IntervalMap intervals = { { 0, { best } } };
+        IntervalMap intervals = { { 0.5*std::sqrt(N), { best } } };
 
         for(int iter = 0; iter < numIterations; ++iter)
         {
@@ -36,7 +65,7 @@ struct Direct
             for(const auto& [k, ints] : intervals)
             {
                 for(const auto& v : ints)
-                    handy::print(v.divisions, "       ", v.x.transpose());
+                    handy::print(v.size, "       ", v.x.transpose());
                 handy::print("\n");
             }
             handy::print("potset:");
@@ -44,13 +73,12 @@ struct Direct
             auto potSet = potentialSet(intervals, best);
             
             for(const auto& v : potSet)
-                handy::print(v.divisions, "       ", v.x.transpose());
+                handy::print(v.size, "       ", v.x.transpose());
             handy::print("\n\n");
 
             auto bestIter = createSplits(scaledF, potSet, intervals);
 
-            if(bestIter < best)
-                best = std::move(bestIter);
+            best = std::min(best, bestIter);
         }
 
         return scaleX(best.x);
@@ -120,19 +148,13 @@ struct Direct
                     right.k[prev]++;
                 }
 
-                left.divisions = std::accumulate(left.k.begin(), left.k.end(), 0);
-                right.divisions = std::accumulate(right.k.begin(), right.k.end(), 0);
+                left.size = intervalSize(left);
+                right.size = intervalSize(right);
 
-                left.size = 0.5 * std::sqrt(std::inner_product(left.k.begin(), left.k.end(), left.k.begin(), 1.0, std::plus<double>{}, std::multiplies<double>{}));
-                right.size = 0.5 * std::sqrt(std::inner_product(right.k.begin(), right.k.end(), right.k.begin(), 1.0, std::plus<double>{}, std::multiplies<double>{}));
+                best = std::min(best, std::min(left, right));
 
-                const auto& bestAxis = std::min(left, right);
-
-                if(bestAxis < best)
-                    best = bestAxis;
-
-                push_heap(intervals[left.divisions], std::move(left));
-                push_heap(intervals[right.divisions], std::move(right));
+                intervals[left.size].push(std::move(left));
+                intervals[right.size].push(std::move(right));
             }
         }
 
@@ -144,11 +166,10 @@ struct Direct
     {
         std::vector<IntervalMap::iterator> hull;
         hull.reserve(intervals.size());
-//        std::prev(intervals.end())
 
         for(auto it = intervals.begin(); it != intervals.end(); ++it)
         {
-            while(hull.size() >= 2 && crossProduct(hull[hull.size()-2]->second[0], hull[hull.size()-1]->second[0], it->second[0]))
+            while(hull.size() >= 2 && crossProduct(hull[hull.size()-2]->second.top(), hull[hull.size()-1]->second.top(), it->second.top()))
                 hull.pop_back();
             
             hull.push_back(it);
@@ -157,9 +178,10 @@ struct Direct
         std::vector<Interval> hullValues;
         hullValues.reserve(hull.size());
 
-        for(auto& it : hull)
+        for(auto it : hull)
         {
-            hullValues.emplace_back(pop_heap(it->second));
+            hullValues.emplace_back(it->second.top());
+            it->second.pop();
 
             if(it->second.empty())
                 it = intervals.erase(it);
@@ -173,7 +195,14 @@ struct Direct
 
     double crossProduct (const Interval& o, const Interval& a, const Interval& b) const
     {
-        return (a.divisions - o.divisions) * (b.fx - o.fx) - (a.fx - o.fx) * (b.divisions - o.divisions);
+        return (a.size - o.size) * (b.fx - o.fx) - (a.fx - o.fx) * (b.size - o.size);
+    }
+
+    float intervalSize (const Interval& interval) const
+    {
+        return 0.5 * std::sqrt(std::accumulate(interval.k.begin(), interval.k.end(), 0.0f, [](float sum, int k){
+            return sum + std::pow(3, -2*k);
+        }));
     }
 
 
