@@ -20,7 +20,12 @@ struct Interval
 
 bool operator< (const Interval& a, const Interval& b)
 {
-    return a.fx <= b.fx;
+    return a.fx < b.fx;
+}
+
+bool operator> (const Interval& a, const Interval& b)
+{
+    return a.fx > b.fx;
 }
 
 
@@ -28,13 +33,13 @@ struct Direct
 {
     struct IntervalComp
     {
-        bool operator() (float a, float b)
+        bool operator() (float a, float b) const
         {
-            return a < b + 1e-13;
+            return a < b - 1e-10;
         }
     };
 
-    using IntervalMap = std::map<float, std::priority_queue<Interval>, IntervalComp>;
+    using IntervalMap = std::map<float, std::priority_queue<Interval, std::vector<Interval>, std::greater<Interval>>, IntervalComp>;
 
     Direct (double eps = 1e-4, int numIterations = 1e4) : eps(eps), numIterations(numIterations)
     {
@@ -57,25 +62,12 @@ struct Direct
 
         Interval best = { func(Vec::Constant(N, 0.5)), 0.5*std::sqrt(N), std::vector<int>(N), Vec(Vec::Constant(N, 0.5)) };
 
-        IntervalMap intervals = { { 0.5*std::sqrt(N), { best } } };
+        IntervalMap intervals;
+        intervals[best.size].push(best);
 
         for(int iter = 0; iter < numIterations; ++iter)
         {
-            handy::print("Iter: ", iter);
-            for(const auto& [k, ints] : intervals)
-            {
-                for(const auto& v : ints)
-                    handy::print(v.size, "       ", v.x.transpose());
-                handy::print("\n");
-            }
-            handy::print("potset:");
-
             auto potSet = potentialSet(intervals, best);
-            
-            for(const auto& v : potSet)
-                handy::print(v.size, "       ", v.x.transpose());
-            handy::print("\n\n");
-
             auto bestIter = createSplits(scaledF, potSet, intervals);
 
             best = std::min(best, bestIter);
@@ -90,18 +82,14 @@ struct Direct
 
         std::vector<Interval> potSet;
         potSet.reserve(hull.size());
-        potSet.push_back(hull.front());
 
-        if(hull.size() > 1)
-            potSet.push_back(hull.back());
-
-        for(int i = 1; i < hull.size() - 1; ++i)
+        for(int i = 0; i < hull.size(); ++i)
         {
-            double k1 = (hull[i].fx - hull[i-1].fx) / (hull[i].size - hull[i-1].size);
-            double k2 = (hull[i].fx - hull[i+1].fx) / (hull[i].size - hull[i+1].size);
-            double k = std::max(k1, k2);
+            double k1 = i > 0 ? (hull[i].fx - hull[i-1].fx) / (hull[i].size - hull[i-1].size) : -1e8;
+            double k2 = i < hull.size() - 1 ? (hull[i].fx - hull[i+1].fx) / (hull[i].size - hull[i+1].size) : -1e8;
+            double k = std::max(0.0, std::max(k1, k2));
 
-            if(hull[i].fx - k * hull[i].size <= best.fx - eps * std::abs(best.fx))
+            if(hull[i].fx - k * hull[i].size <= best.fx - eps * std::abs(best.fx) || i == hull.size() - 1)
                 potSet.push_back(hull[i]);
         }
 
@@ -169,7 +157,7 @@ struct Direct
 
         for(auto it = intervals.begin(); it != intervals.end(); ++it)
         {
-            while(hull.size() >= 2 && crossProduct(hull[hull.size()-2]->second.top(), hull[hull.size()-1]->second.top(), it->second.top()))
+            while(hull.size() >= 2 && crossProduct(hull[hull.size()-2]->second.top(), hull[hull.size()-1]->second.top(), it->second.top()) <= 0)
                 hull.pop_back();
             
             hull.push_back(it);

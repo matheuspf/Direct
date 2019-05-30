@@ -1,9 +1,7 @@
 #pragma once
 
-#include "Helpers.h"
 
-using Vec = Eigen::VectorXd;
-using Mat = Eigen::MatrixXd;
+#include <Eigen/Dense>
 
 
 template <int M = 5>
@@ -19,7 +17,7 @@ struct Shekel
         b /= 10;
     }
 
-    double operator() (const Vec& x) const
+    double operator() (const Eigen::VectorXd& x) const
     {
         double res = 0.0;
 
