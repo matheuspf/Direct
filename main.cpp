@@ -2,18 +2,20 @@
 #include <Eigen/Dense>
 
 #include "Direct.h"
-#include "Shekel.h"
+#include "Functions.h"
 
 
 
 int main ()
 {
-    Shekel<5> f;
+    constexpr int N = 3;
 
-    Vec l = Vec::Constant(4, 0.0);
-    Vec u = Vec::Constant(4, 10.0);
+    Hartmann<N> f;
 
-    Direct direct(1e-4, 10000);
+    Vec l = Vec::Constant(N, 0.0);
+    Vec u = Vec::Constant(N, 1.0);
+
+    Direct direct(1e-4, 1000);
 
     auto res = direct(f, l, u);
 

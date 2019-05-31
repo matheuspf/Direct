@@ -155,8 +155,16 @@ struct Direct
         std::vector<IntervalMap::iterator> hull;
         hull.reserve(intervals.size());
 
+        const auto& first = intervals.begin()->second.top();
+        const auto& last = std::prev(intervals.end())->second.top();
+
+        double minSlope = (last.fx - first.fx) / std::max(last.size - first.size, 1e-8);
+
         for(auto it = intervals.begin(); it != intervals.end(); ++it)
         {
+            if(it->second.top().fx > first.fx + (it->second.top().size - first.size) * minSlope)
+                continue;
+
             while(hull.size() >= 2 && crossProduct(hull[hull.size()-2]->second.top(), hull[hull.size()-1]->second.top(), it->second.top()) <= 0)
                 hull.pop_back();
             
