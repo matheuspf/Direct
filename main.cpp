@@ -8,7 +8,7 @@
 
 int main ()
 {
-    constexpr int N = 3;
+    constexpr int N = 6;
 
     Hartmann<N> f;
 

@@ -14,6 +14,7 @@ struct Interval
 {
     double fx;
     double size;
+    int divisions;
     std::vector<int> k;
     Vec x;
 };
@@ -31,15 +32,7 @@ bool operator> (const Interval& a, const Interval& b)
 
 struct Direct
 {
-    struct IntervalComp
-    {
-        bool operator() (float a, float b) const
-        {
-            return a < b - 1e-10;
-        }
-    };
-
-    using IntervalMap = std::map<float, std::priority_queue<Interval, std::vector<Interval>, std::greater<Interval>>, IntervalComp>;
+    using IntervalMap = std::map<int, std::priority_queue<Interval, std::vector<Interval>, std::greater<Interval>>, std::greater<int>>;
 
     Direct (double eps = 1e-4, int numIterations = 1e4) : eps(eps), numIterations(numIterations)
     {
@@ -60,10 +53,10 @@ struct Direct
 
         int N = lower.size();
 
-        Interval best = { func(Vec::Constant(N, 0.5)), 0.5*std::sqrt(N), std::vector<int>(N), Vec(Vec::Constant(N, 0.5)) };
+        Interval best = { func(Vec::Constant(N, 0.5)), 0.5*std::sqrt(N), 0, std::vector<int>(N), Vec(Vec::Constant(N, 0.5)) };
 
         IntervalMap intervals;
-        intervals[best.size].push(best);
+        intervals[best.divisions].push(best);
 
         for(int iter = 0; iter < numIterations; ++iter)
         {
@@ -134,6 +127,9 @@ struct Direct
                 {
                     left.k[prev]++;
                     right.k[prev]++;
+
+                    left.divisions++;
+                    right.divisions++;
                 }
 
                 left.size = intervalSize(left);
@@ -141,8 +137,8 @@ struct Direct
 
                 best = std::min(best, std::min(left, right));
 
-                intervals[left.size].push(std::move(left));
-                intervals[right.size].push(std::move(right));
+                intervals[left.divisions].push(std::move(left));
+                intervals[right.divisions].push(std::move(right));
             }
         }
 
