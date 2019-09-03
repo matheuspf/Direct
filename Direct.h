@@ -4,6 +4,7 @@
 #include <handy/Handy.h>
 #include <map>
 #include <queue>
+#include "convexHull.hpp"
 
 
 using Vec = Eigen::VectorXd;
@@ -53,7 +54,7 @@ struct Direct
 
         int N = lower.size();
 
-        Interval best = { func(Vec::Constant(N, 0.5)), 0.5*std::sqrt(N), 0, std::vector<int>(N), Vec(Vec::Constant(N, 0.5)) };
+        Interval best = { func(Vec::Constant(N, 0.5)), 0.5, 0, std::vector<int>(N), Vec(Vec::Constant(N, 0.5)) };
 
         IntervalMap intervals;
         intervals[best.divisions].push(best);
@@ -75,17 +76,33 @@ struct Direct
 
         std::vector<Interval> potSet;
         potSet.reserve(hull.size());
+        bool done = false;
+        double eps_ = eps;
 
-        for(int i = 0; i < hull.size(); ++i)
+        handy::print(hull.size());
+
+        gamb:
+        for(int i = 0; i < hull.size() - 1; ++i)
         {
             double k1 = i > 0 ? (hull[i].fx - hull[i-1].fx) / (hull[i].size - hull[i-1].size) : -1e8;
             double k2 = i < hull.size() - 1 ? (hull[i].fx - hull[i+1].fx) / (hull[i].size - hull[i+1].size) : -1e8;
             double k = std::max(0.0, std::max(k1, k2));
 
-            if(hull[i].fx - k * hull[i].size <= best.fx - eps * std::abs(best.fx) || i == hull.size() - 1)
+            if(hull[i].fx - k * hull[i].size <= best.fx - eps_ * std::abs(best.fx))
+            {
                 potSet.push_back(hull[i]);
+                done = true;
+                // handy::print(hull[i].divisions);
+            }
         }
 
+        if(!done && eps_ != 0.0)
+        {
+            eps_ = 0.0;
+            goto gamb;
+        }
+
+        potSet.push_back(hull.back());
         return potSet;
     }
 
@@ -145,34 +162,18 @@ struct Direct
         return best;
     }
 
-
     std::vector<Interval> convexHull (IntervalMap& intervals)
     {
-        std::vector<IntervalMap::iterator> hull;
-        hull.reserve(intervals.size());
+        auto hullIters = algs::convexHull2D(intervals.begin(), intervals.end(), [](auto& p){
+            return std::make_pair(p.second.top().size, p.second.top().fx);
+        });
 
-        const auto& first = intervals.begin()->second.top();
-        const auto& last = std::prev(intervals.end())->second.top();
+        std::vector<Interval> hull;
+        hull.reserve(hullIters.size());
 
-        double minSlope = (last.fx - first.fx) / std::max(last.size - first.size, 1e-8);
-
-        for(auto it = intervals.begin(); it != intervals.end(); ++it)
+        for(auto it : hullIters)
         {
-            if(it->second.top().fx > first.fx + (it->second.top().size - first.size) * minSlope)
-                continue;
-
-            while(hull.size() >= 2 && crossProduct(hull[hull.size()-2]->second.top(), hull[hull.size()-1]->second.top(), it->second.top()) <= 0)
-                hull.pop_back();
-            
-            hull.push_back(it);
-        }
-
-        std::vector<Interval> hullValues;
-        hullValues.reserve(hull.size());
-
-        for(auto it : hull)
-        {
-            hullValues.emplace_back(it->second.top());
+            hull.emplace_back(it->second.top());
             it->second.pop();
 
             if(it->second.empty())
@@ -182,19 +183,21 @@ struct Direct
                 it++;
         }
 
-        return hullValues;
+        return hull;
     }
 
-    double crossProduct (const Interval& o, const Interval& a, const Interval& b) const
+    double intervalSize (const Interval& interval) const
     {
-        return (a.size - o.size) * (b.fx - o.fx) - (a.fx - o.fx) * (b.size - o.size);
-    }
+        int N = interval.k.size();
+        int level = interval.divisions / interval.k.size();
+        int stage = interval.divisions % interval.k.size();
 
-    float intervalSize (const Interval& interval) const
-    {
-        return 0.5 * std::sqrt(std::accumulate(interval.k.begin(), interval.k.end(), 0.0f, [](float sum, int k){
-            return sum + std::pow(3, -2*k);
-        }));
+        return 0.5 * std::pow(3.0, -level) * std::sqrt(N - (8.0 / 9) * stage);
+        // return 0.5 * std::pow(3.0, -level);
+
+        // return 0.5 * std::sqrt(std::accumulate(interval.k.begin(), interval.k.end(), 0.0, [](double sum, int k){
+        //     return sum + std::pow(3, -2*k);
+        // }));
     }
 
 
