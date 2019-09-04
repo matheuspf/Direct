@@ -8,16 +8,17 @@
 
 int main ()
 {
-    constexpr int N = 5;
+    constexpr int N = 4;
+    constexpr int M = 5;
 
-    Shekel<N> f;
+    Shekel<M> f;
 
     // Vec x(4); x << 4, 4, 4, 4; handy::print(f(x));
 
     Vec l = Vec::Constant(N, 0.0);
     Vec u = Vec::Constant(N, 10.0);
 
-    Direct direct(1e-4, 20);
+    Direct direct(1e-4, 5);
 
     auto res = direct(f, l, u);
 

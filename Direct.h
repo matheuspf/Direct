@@ -20,6 +20,30 @@ struct Interval
     Vec x;
 };
 
+
+std::ostream& operator << (std::ostream& out, const Interval& itv)
+{
+    out << "fx: " << itv.fx << "\t size: " << itv.size << " \t div:" << itv.divisions << "\t ks: [";
+    
+    for(int i = 0; i < itv.k.size(); ++i)
+    {
+        if(i)
+            out << ",";
+        out << itv.k[i];
+    }
+
+    out << "]\t xs: [";
+
+    for(int i = 0; i < itv.x.size(); ++i)
+    {
+        if(i)
+            out << ",";
+        out << itv.x[i];
+    }
+
+    return out << "]\n";
+}
+
 bool operator< (const Interval& a, const Interval& b)
 {
     return a.fx < b.fx;
@@ -61,6 +85,11 @@ struct Direct
 
         for(int iter = 0; iter < numIterations; ++iter)
         {
+            handy::print("Intervals:");
+            for(auto p : intervals)
+                handy::print(p.second.top());
+            handy::print("");
+
             auto potSet = potentialSet(intervals, best);
             auto bestIter = createSplits(scaledF, potSet, intervals);
 
@@ -79,9 +108,7 @@ struct Direct
         bool done = false;
         double eps_ = eps;
 
-        handy::print(hull.size());
-
-        gamb:
+        // gamb:
         for(int i = 0; i < hull.size() - 1; ++i)
         {
             double k1 = i > 0 ? (hull[i].fx - hull[i-1].fx) / (hull[i].size - hull[i-1].size) : -1e8;
@@ -96,11 +123,11 @@ struct Direct
             }
         }
 
-        if(!done && eps_ != 0.0)
-        {
-            eps_ = 0.0;
-            goto gamb;
-        }
+        // if(!done && eps_ != 0.0)
+        // {
+        //     eps_ = 0.0;
+        //     goto gamb;
+        // }
 
         potSet.push_back(hull.back());
         return potSet;
